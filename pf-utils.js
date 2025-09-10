@@ -174,10 +174,10 @@ function extractCellValue(td) {
         return checkbox.checked ? 'Ja' : 'Nein';
     }
     
-    // Links
+    // Links - hier wird "X" für <a> Tags gesetzt
     const link = td.querySelector('a');
     if (link) {
-        return link.textContent.trim();
+        return 'X';
     }
     
     // Normaler Text (Icons und Buttons entfernen)
