@@ -1,4 +1,35 @@
 /**
+ * Fügt Paging-Informationen zur CSV hinzu
+ * @param {Array} csvData - CSV-Daten Array
+ * @param {Object} widget - PrimeFaces DataTable Widget
+ * @param {string} delimiter - CSV-Trennzeichen
+ */
+function addPagingInfoToCsv(csvData, widget, delimiter) {
+    if (!widget || !widget.cfg || !widget.cfg.paginator) {
+        return;
+    }
+    
+    const paginator = widget.paginator;
+    if (!paginator) {
+        return;
+    }
+    
+    try {
+        const currentPage = paginator.getCurrentPage() + 1;
+        const totalPages = paginator.getTotalPages();
+        const totalRecords = paginator.getTotalRecords();
+        const pageSize = paginator.getRows();
+        const startRecord = (currentPage - 1) * pageSize + 1;
+        const endRecord = Math.min(currentPage * pageSize, totalRecords);
+        
+        csvData.push(''); // Leere Zeile
+        csvData.push('Paging-Info' + delimiter + startRecord + ' von ' + totalRecords + ' Datensätzen' + delimiter + 'Seite ' + currentPage + ' von ' + totalPages);
+    } catch (error) {
+        console.warn('Konnte Paging-Informationen nicht extrahieren:', error);
+    }
+}
+
+/**
  * Exportiert PrimeFaces DataTable Daten als CSV
  * @param {string} tableIdentifier - ID oder widgetVar der DataTable
  * @param {boolean} exportAll - true: alle Daten, false: nur sichtbare Daten
@@ -45,10 +76,10 @@ function exportDataTableToCSV(tableIdentifier, exportAll = false, filename = 'da
     if (headerRow) {
         const headerCells = headerRow.querySelectorAll('th');
         headerCells.forEach(th => {
-            // Checkboxes, Actions und andere spezielle Spalten überspringen
+            // Nur Selection-Checkboxes und Row-Editor überspringen
+            // row-toggler-column SOLL exportiert werden
             if (!th.classList.contains('ui-selection-column') && 
                 !th.classList.contains('ui-roweditor-column') &&
-                !th.classList.contains('ui-row-toggler-column') &&
                 !th.hasAttribute('data-skip-export')) {
                 
                 // Header-Text extrahieren (ohne Sortier-Icons etc.)
@@ -60,9 +91,12 @@ function exportDataTableToCSV(tableIdentifier, exportAll = false, filename = 'da
                     headerText = th.textContent.trim().replace(/[\n\r\s]+/g, ' ');
                 }
                 
-                if (headerText) {
-                    headers.push(headerText);
+                // Auch Spalten ohne Header-Text berücksichtigen
+                if (!headerText || headerText === '') {
+                    headerText = 'Spalte_' + (headers.length + 1);
                 }
+                
+                headers.push(headerText);
             }
         });
     }
@@ -100,20 +134,23 @@ function exportDataTableToCSV(tableIdentifier, exportAll = false, filename = 'da
             
             const row = [];
             const cells = tr.querySelectorAll('td');
-            let cellIndex = 0;
+            let headerIndex = 0;
             
             cells.forEach(td => {
-                // Spezielle Spalten überspringen
-                if (!td.classList.contains('ui-selection-column') && 
-                    !td.classList.contains('ui-roweditor-column') &&
-                    !td.classList.contains('ui-row-toggler-column') &&
-                    !td.hasAttribute('data-skip-export')) {
-                    
-                    if (cellIndex < headers.length) {
-                        const cellValue = extractCellValue(td);
-                        row.push(escapeCsvValue(cellValue, delimiter));
-                        cellIndex++;
-                    }
+                // Nur Selection-Checkboxes und Row-Editor überspringen
+                // row-toggler-column SOLL exportiert werden
+                const isSpecialColumn = td.classList.contains('ui-selection-column') || 
+                                      td.classList.contains('ui-roweditor-column') ||
+                                      td.hasAttribute('data-skip-export');
+                
+                if (!isSpecialColumn && headerIndex < headers.length) {
+                    const cellValue = extractCellValue(td);
+                    row.push(escapeCsvValue(cellValue, delimiter));
+                }
+                
+                // Header-Index nur für nicht-spezielle Spalten erhöhen
+                if (!isSpecialColumn) {
+                    headerIndex++;
                 }
             });
             
@@ -133,20 +170,7 @@ function exportDataTableToCSV(tableIdentifier, exportAll = false, filename = 'da
     });
     
     // Paging-Informationen hinzufügen
-    if (widget && widget.cfg && widget.cfg.paginator) {
-        const paginator = widget.paginator;
-        if (paginator) {
-            const currentPage = paginator.getCurrentPage() + 1;
-            const totalPages = paginator.getTotalPages();
-            const totalRecords = paginator.getTotalRecords();
-            const pageSize = paginator.getRows();
-            const startRecord = (currentPage - 1) * pageSize + 1;
-            const endRecord = Math.min(currentPage * pageSize, totalRecords);
-            
-            csvData.push(''); // Leere Zeile
-            csvData.push('Paging-Info' + delimiter + startRecord + ' von ' + totalRecords + ' Datensätzen' + delimiter + 'Seite ' + currentPage + ' von ' + totalPages);
-        }
-    }
+    addPagingInfoToCsv(csvData, widget, delimiter);
     
     // CSV Download
     downloadCSV(csvData.join('\n'), filename);
